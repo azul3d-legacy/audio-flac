@@ -73,7 +73,24 @@ func NewEncoder(w io.WriteSeeker, conf audio.Config) (enc audio.Writer, err erro
 // with regards to the writer: no more data can be subsequently wrote after
 // an error.
 func (enc *encoder) Write(b audio.Slice) (n int, err error) {
-	panic("not yet implemented.")
+	// TODO(u): Implement fast-paths for PCM8, PCM16 and PCM24 (PCM32).
+
+	var buf [2]byte
+	for ; n < b.Len(); n++ {
+		f := b.At(n)
+		sample := audio.F64ToPCM16(f)
+		buf[0] = uint8(sample)
+		buf[1] = uint8(sample >> 8)
+		m, err := enc.w.Write(buf[:])
+		if err != nil {
+			return n, err
+		}
+		if m < len(buf) {
+			return n, io.ErrShortWrite
+		}
+	}
+
+	return n, nil
 }
 
 // Close signals to the encoder that encoding has been completed, thereby
