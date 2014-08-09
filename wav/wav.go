@@ -29,7 +29,9 @@
 package wav
 
 import (
+	"encoding/binary"
 	"io"
+	"os"
 
 	"azul3d.org/audio.v1"
 )
@@ -40,6 +42,8 @@ type encoder struct {
 	w io.WriteSeeker
 	// Audio configuration; including sample rate and number of channels.
 	conf audio.Config
+	// nsamples specifies the total number of samples written from all channels.
+	nsamples uint64
 }
 
 // bps represents the number of bits-per-sample used to encode audio samples.
@@ -75,6 +79,7 @@ func NewEncoder(w io.WriteSeeker, conf audio.Config) (enc audio.Writer, err erro
 func (enc *encoder) Write(b audio.Slice) (n int, err error) {
 	// TODO(u): Implement fast-paths for PCM8, PCM16 and PCM24 (PCM32).
 
+	// Generic implementation.
 	var buf [2]byte
 	for ; n < b.Len(); n++ {
 		f := b.At(n)
@@ -88,6 +93,7 @@ func (enc *encoder) Write(b audio.Slice) (n int, err error) {
 		if m < len(buf) {
 			return n, io.ErrShortWrite
 		}
+		enc.nsamples++
 	}
 
 	return n, nil
@@ -95,6 +101,30 @@ func (enc *encoder) Write(b audio.Slice) (n int, err error) {
 
 // Close signals to the encoder that encoding has been completed, thereby
 // allowing it to update the placeholder values in the WAV file header.
-func Close() error {
-	panic("not yet implemented.")
+func (enc *encoder) Close() error {
+	// Correct the size field of the RIFF type chunk header.
+	dataSize := uint32(uint64(enc.conf.Channels) * enc.nsamples * bps / 8)
+	riffSize := 4 + 24 + 8 + dataSize
+	off := int64(4)
+	_, err := enc.w.Seek(off, os.SEEK_SET)
+	if err != nil {
+		return err
+	}
+	err = binary.Write(enc.w, binary.LittleEndian, riffSize)
+	if err != nil {
+		return err
+	}
+
+	// Correct the size field of the WAVE data chunk header.
+	off = 12 + 24 + 4
+	_, err = enc.w.Seek(off, os.SEEK_SET)
+	if err != nil {
+		return err
+	}
+	err = binary.Write(enc.w, binary.LittleEndian, dataSize)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
