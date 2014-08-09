@@ -17,9 +17,9 @@ func writeHeader(w io.Writer, conf audio.Config) error {
 
 	// RIFF type chunk.
 	riff := riff{
-		typ: 0x57415645, // "WAVE"
+		typ: 0x45564157, // "WAVE"
 	}
-	riff.id = 0x52494646 // "RIFF"
+	riff.id = 0x46464952 // "RIFF"
 	riff.size = placeholder
 	err := binary.Write(w, binary.LittleEndian, riff)
 	if err != nil {
@@ -35,7 +35,7 @@ func writeHeader(w io.Writer, conf audio.Config) error {
 		blockAlign: uint16(conf.Channels * bps / 8),
 		bps:        bps,
 	}
-	format.id = 0x666D7420 // "fmt "
+	format.id = 0x20746D66 // "fmt "
 	format.size = 16
 	err = binary.Write(w, binary.LittleEndian, format)
 	if err != nil {
@@ -44,7 +44,7 @@ func writeHeader(w io.Writer, conf audio.Config) error {
 
 	// WAVE data chunk.
 	data := chunkHeader{
-		id:   0x64617461, // "data"
+		id:   0x61746164, // "data"
 		size: placeholder,
 	}
 	err = binary.Write(w, binary.LittleEndian, data)
