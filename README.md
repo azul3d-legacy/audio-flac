@@ -24,16 +24,21 @@ Documentation
 
 Documentation provided by GoDoc.
 
-* [flac][]: provides a FLAC audio decoder.
+* [flac][mewkiz/audio/flac]: provides a FLAC audio decoder.
 
 		go get github.com/mewkiz/audio/flac
 
-* [wav][]: decodes wav audio files.
+* [wav][azul3d/audio/wav]: decodes wav audio files.
 
 		go get azul3d.org/audio/wav.v1
 
-[flac]: https://godoc.org/github.com/mewkiz/audio/flac
-[wav]: https://godoc.org/gopkg.in/azul3d/audio-wav.v1
+* [wav][mewkiz/audio/wav]: provides a WAV audio encoder.
+
+		go get github.com/mewkiz/audio/wav
+
+[mewkiz/audio/flac]: https://godoc.org/github.com/mewkiz/audio/flac
+[azul3d/audio/wav]: https://godoc.org/gopkg.in/azul3d/audio-wav.v1
+[mewkiz/audio/wav]: https://godoc.org/github.com/mewkiz/audio/wav
 
 public domain
 -------------
