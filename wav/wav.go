@@ -48,6 +48,8 @@ const bps = 16
 // NewEncoder creates a new WAV encoder, which stores the audio configuration in
 // a WAV header and encodes any audio samples written to it. The contents of the
 // WAV header and the encoded audio samples are written to w.
+//
+// Note: The Close method of the encoder must be called when finished using it.
 func NewEncoder(w io.WriteSeeker, conf audio.Config) (enc audio.Writer, err error) {
 	// Write WAV file header to w, based on the audio configuration.
 	err = writeHeader(w, conf)
@@ -64,12 +66,18 @@ func NewEncoder(w io.WriteSeeker, conf audio.Config) (enc audio.Writer, err erro
 // writer.
 //
 // Returned is the number of samples from the slice that where wrote to
-// the writer, and an error if any occured.
+// the writer, and an error if any occurred.
 //
 // If the number of samples wrote is less than buf.Len() then the returned
 // error must be non-nil. If any error occurs it should be considered fatal
 // with regards to the writer: no more data can be subsequently wrote after
 // an error.
 func (enc *encoder) Write(b audio.Slice) (n int, err error) {
+	panic("not yet implemented.")
+}
+
+// Close signals to the encoder that encoding has been completed, thereby
+// allowing it to update the placeholder values in the WAV file header.
+func Close() error {
 	panic("not yet implemented.")
 }
