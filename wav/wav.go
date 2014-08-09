@@ -54,7 +54,7 @@ const bps = 16
 // WAV header and the encoded audio samples are written to w.
 //
 // Note: The Close method of the encoder must be called when finished using it.
-func NewEncoder(w io.WriteSeeker, conf audio.Config) (enc audio.Writer, err error) {
+func NewEncoder(w io.WriteSeeker, conf audio.Config) (enc *encoder, err error) {
 	// Write WAV file header to w, based on the audio configuration.
 	err = writeHeader(w, conf)
 	if err != nil {
