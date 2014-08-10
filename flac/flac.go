@@ -30,7 +30,7 @@ func newDecoder(r interface{}) (audio.Decoder, error) {
 	if !ok {
 		return nil, fmt.Errorf("flac.newDecoder: unable to decode r; expected io.Reader, got %T", r)
 	}
-	dec := &decoder{buf: make([]int32, 0)}
+	dec := &decoder{buf: make(audio.F64Samples, 0)}
 	var err error
 	dec.stream, err = flac.New(rr)
 	if err != nil {
@@ -45,7 +45,9 @@ type decoder struct {
 	stream *flac.Stream
 	// Buffer superfluous decoded samples from previous Read operations, for
 	// future calls to Read.
-	buf []int32
+	buf audio.F64Samples
+	// Points to the first buffered sample in buf.
+	first int
 }
 
 // Config returns the audio stream configuration of this decoder. It may block
@@ -74,59 +76,42 @@ func (dec *decoder) Read(b audio.Slice) (n int, err error) {
 
 	// Generic implementation.
 
-	// Store buffered audio samples from the previous frame.
-	bps := dec.stream.Info.BitsPerSample
-	for i := 0; i < len(dec.buf); i++ {
+	// Drain buffered samples from previous read operations.
+	for _, f := range dec.buf[dec.first:] {
 		if n >= b.Len() {
-			break
+			dec.first = n
+			return n, nil
 		}
-		sample := pcmToF64(dec.buf[i], bps)
-		b.Set(n, sample)
+		b.Set(n, f)
 		n++
 	}
-	dec.buf = dec.buf[n:]
-	if n >= b.Len() {
-		return n, nil
-	}
+	dec.first = 0
+	dec.buf = dec.buf[:0]
 
-	// Decode audio samples of the next frame.
+	// Decode the audio samples of a frame.
 	frame, err := dec.stream.ParseNext()
-	if err == io.EOF {
-		err = audio.EOS
-	}
-	if len(frame.Subframes) < 1 {
+	if err != nil {
+		if err == io.EOF {
+			return n, audio.EOS
+		}
 		return n, err
 	}
-
-	// Store decoded audio samples in b.
-	nsamples := len(frame.Subframes[0].Samples)
-	for i := 0; i < nsamples; i++ {
+	bps := dec.stream.Info.BitsPerSample
+	for i := 0; i < int(frame.BlockSize); i++ {
 		for _, subframe := range frame.Subframes {
-			if n >= b.Len() {
-				break
-			}
-			sample := pcmToF64(subframe.Samples[i], bps)
-			b.Set(n, sample)
-			n++
-		}
-	}
-
-	// Buffer superfluous decoded audio samples in dec.buf.
-	extra := nsamples - n
-	if extra > 0 {
-		if cap(dec.buf) >= extra {
-			dec.buf = dec.buf[:extra]
-		} else {
-			dec.buf = make([]int32, extra)
-		}
-		for i := range dec.buf {
-			for _, subframe := range frame.Subframes {
-				dec.buf[i] = subframe.Samples[n+i]
+			sample := subframe.Samples[i]
+			f := pcmToF64(sample, bps)
+			if n < b.Len() {
+				b.Set(n, f)
+				n++
+			} else {
+				// Buffer superfluous audio samples.
+				dec.buf = append(dec.buf, f)
 			}
 		}
 	}
 
-	return n, err
+	return n, nil
 }
 
 // pcmToF64 converts a signed bps-bit linear PCM audio sample to a 64-bit
