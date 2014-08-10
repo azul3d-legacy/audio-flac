@@ -14,6 +14,14 @@ import (
 	"github.com/mewkiz/pkg/pathutil"
 )
 
+// flagForce specifies if file overwriting should be forced, when a WAV file of
+// the same name already exists.
+var flagForce bool
+
+func init() {
+	flag.BoolVar(&flagForce, "f", false, "Force overwrite.")
+}
+
 func main() {
 	flag.Parse()
 	for _, path := range flag.Args() {
@@ -45,12 +53,14 @@ func flac2wav(path string) error {
 
 	// Create WAV file.
 	wavPath := pathutil.TrimExt(path) + ".wav"
-	exists, err := osutil.Exists(wavPath)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return fmt.Errorf("the file %q exists already.", wavPath)
+	if !flagForce {
+		exists, err := osutil.Exists(wavPath)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return fmt.Errorf("the file %q exists already.", wavPath)
+		}
 	}
 	w, err := os.Create(wavPath)
 
