@@ -16,10 +16,9 @@ type encoder struct {
 	conf audio.Config
 	// nsamples specifies the total number of samples written from all channels.
 	nsamples uint64
+	// bps represents the number of bits-per-sample used to encode audio samples.
+	bps uint8
 }
-
-// bps represents the number of bits-per-sample used to encode audio samples.
-const bps = 16
 
 // NewEncoder creates a new WAV encoder, which stores the audio configuration in
 // a WAV header and encodes any audio samples written to it. The contents of the
@@ -28,14 +27,15 @@ const bps = 16
 // Note: The Close method of the encoder must be called when finished using it.
 func NewEncoder(w io.WriteSeeker, conf audio.Config) (enc *encoder, err error) {
 	// Write WAV file header to w, based on the audio configuration.
-	err = writeHeader(w, conf)
+	enc = &encoder{w: w, conf: conf}
+	err = enc.writeHeader()
 	if err != nil {
 		return nil, err
 	}
 
 	// Return encoder which encodes the audio samples written to it and stores
 	// writes those to w.
-	return &encoder{w: w, conf: conf}, nil
+	return enc, nil
 }
 
 // Write attempts to write all, b.Len(), samples in the slice to the
@@ -75,7 +75,7 @@ func (enc *encoder) Write(b audio.Slice) (n int, err error) {
 // allowing it to update the placeholder values in the WAV file header.
 func (enc *encoder) Close() error {
 	// Correct the size field of the RIFF type chunk header.
-	dataSize := uint32(uint64(enc.conf.Channels) * enc.nsamples * bps / 8)
+	dataSize := uint32(uint64(enc.conf.Channels) * enc.nsamples * uint64(enc.bps) / 8)
 	riffSize := 4 + 24 + 8 + dataSize
 	off := int64(4)
 	_, err := enc.w.Seek(off, os.SEEK_SET)

@@ -1,15 +1,10 @@
 package wav
 
-import (
-	"encoding/binary"
-	"io"
+import "encoding/binary"
 
-	"azul3d.org/audio.v1"
-)
-
-// writeHeader writes a WAV file header to w, based on the provided audio
+// writeHeader writes a WAV file header to enc.w, based on the provided audio
 // configuration.
-func writeHeader(w io.Writer, conf audio.Config) error {
+func (enc *encoder) writeHeader() error {
 	// placeholder is used when a value of the WAV header cannot be determined in
 	// advance. After the last audio sample has been encoded these placeholder
 	// values must be updated, which is why an io.WriteSeeker is required.
@@ -21,23 +16,24 @@ func writeHeader(w io.Writer, conf audio.Config) error {
 	}
 	riff.id = 0x46464952 // "RIFF"
 	riff.size = placeholder
-	err := binary.Write(w, binary.LittleEndian, riff)
+	err := binary.Write(enc.w, binary.LittleEndian, riff)
 	if err != nil {
 		return err
 	}
 
 	// WAVE format chunk.
+	conf := enc.conf
 	format := format{
 		format:     formatPCM,
 		nchannels:  uint16(conf.Channels),
 		sampleRate: uint32(conf.SampleRate),
-		byteRate:   uint32(conf.Channels * conf.SampleRate * bps / 8),
-		blockAlign: uint16(conf.Channels * bps / 8),
-		bps:        bps,
+		byteRate:   uint32(conf.Channels * conf.SampleRate * int(enc.bps) / 8),
+		blockAlign: uint16(conf.Channels * int(enc.bps) / 8),
+		bps:        uint16(enc.bps),
 	}
 	format.id = 0x20746D66 // "fmt "
 	format.size = 16
-	err = binary.Write(w, binary.LittleEndian, format)
+	err = binary.Write(enc.w, binary.LittleEndian, format)
 	if err != nil {
 		return err
 	}
@@ -47,7 +43,7 @@ func writeHeader(w io.Writer, conf audio.Config) error {
 		id:   0x61746164, // "data"
 		size: placeholder,
 	}
-	err = binary.Write(w, binary.LittleEndian, data)
+	err = binary.Write(enc.w, binary.LittleEndian, data)
 	if err != nil {
 		return err
 	}
