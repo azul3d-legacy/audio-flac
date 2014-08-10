@@ -1,7 +1,7 @@
+// flac2wav is a tool which converts FLAC files to WAV files.
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"log"
@@ -35,21 +35,20 @@ func main() {
 // flac2wav converts the provided FLAC file to a WAV file.
 func flac2wav(path string) error {
 	// Open FLAC file.
-	f, err := os.Open(path)
+	fr, err := os.Open(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	br := bufio.NewReader(f)
+	defer fr.Close()
 
 	// Create FLAC decoder.
-	dec, magic, err := audio.NewDecoder(br)
+	dec, magic, err := audio.NewDecoder(fr)
 	if err != nil {
 		return err
 	}
 	fmt.Println("magic:", magic)
 	conf := dec.Config()
-	fmt.Println(conf)
+	fmt.Println("conf:", conf)
 
 	// Create WAV file.
 	wavPath := pathutil.TrimExt(path) + ".wav"
@@ -62,15 +61,20 @@ func flac2wav(path string) error {
 			return fmt.Errorf("the file %q exists already.", wavPath)
 		}
 	}
-	w, err := os.Create(wavPath)
+	fw, err := os.Create(wavPath)
+	if err != nil {
+		return err
+	}
+	defer fw.Close()
 
 	// Create WAV encoder.
-	enc, err := wav.NewEncoder(w, conf)
+	enc, err := wav.NewEncoder(fw, conf)
 	if err != nil {
 		return err
 	}
 	defer enc.Close()
 
+	// Encode WAV audio samples copied from the FLAC decoder.
 	_, err = audio.Copy(enc, dec)
 	if err != nil {
 		return err
