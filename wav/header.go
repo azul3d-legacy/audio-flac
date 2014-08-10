@@ -2,7 +2,7 @@ package wav
 
 import "encoding/binary"
 
-// writeHeader writes a WAV file header to enc.w, based on the provided audio
+// writeHeader writes a WAV file header to enc.bw, based on the provided audio
 // configuration.
 func (enc *encoder) writeHeader() error {
 	// placeholder is used when a value of the WAV header cannot be determined in
@@ -16,7 +16,7 @@ func (enc *encoder) writeHeader() error {
 	}
 	riff.id = 0x46464952 // "RIFF"
 	riff.size = placeholder
-	err := binary.Write(enc.w, binary.LittleEndian, riff)
+	err := binary.Write(enc.bw, binary.LittleEndian, riff)
 	if err != nil {
 		return err
 	}
@@ -33,7 +33,7 @@ func (enc *encoder) writeHeader() error {
 	}
 	format.id = 0x20746D66 // "fmt "
 	format.size = 16
-	err = binary.Write(enc.w, binary.LittleEndian, format)
+	err = binary.Write(enc.bw, binary.LittleEndian, format)
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func (enc *encoder) writeHeader() error {
 		id:   0x61746164, // "data"
 		size: placeholder,
 	}
-	err = binary.Write(enc.w, binary.LittleEndian, data)
+	err = binary.Write(enc.bw, binary.LittleEndian, data)
 	if err != nil {
 		return err
 	}

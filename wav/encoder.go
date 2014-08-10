@@ -1,6 +1,7 @@
 package wav
 
 import (
+	"bufio"
 	"encoding/binary"
 	"io"
 	"os"
@@ -10,12 +11,14 @@ import (
 
 // encoder is capable of encoding audio samples to a WAV file.
 type encoder struct {
+	// A buffered writer, wrapping write operations to w.
+	bw *bufio.Writer
 	// Underlying io.WriteSeeker to which the WAV file is written to.
-	w io.WriteSeeker
+	ws io.WriteSeeker
 	// Audio configuration; including sample rate and number of channels.
 	conf audio.Config
 	// nsamples specifies the total number of samples written from all channels.
-	nsamples uint64
+	nsamples uint32
 	// bps represents the number of bits-per-sample used to encode audio samples.
 	bps uint8
 }
@@ -27,7 +30,9 @@ type encoder struct {
 // Note: The Close method of the encoder must be called when finished using it.
 func NewEncoder(w io.WriteSeeker, conf audio.Config) (enc *encoder, err error) {
 	// Write WAV file header to w, based on the audio configuration.
-	enc = &encoder{w: w, conf: conf}
+	// TODO(u): Add output support for additional audio sample format; instead of
+	// only using 16-bit PCM.
+	enc = &encoder{bw: bufio.NewWriter(w), ws: w, conf: conf, bps: 16}
 	err = enc.writeHeader()
 	if err != nil {
 		return nil, err
@@ -58,7 +63,7 @@ func (enc *encoder) Write(b audio.Slice) (n int, err error) {
 		sample := audio.F64ToPCM16(f)
 		buf[0] = uint8(sample)
 		buf[1] = uint8(sample >> 8)
-		m, err := enc.w.Write(buf[:])
+		m, err := enc.bw.Write(buf[:])
 		if err != nil {
 			return n, err
 		}
@@ -74,26 +79,28 @@ func (enc *encoder) Write(b audio.Slice) (n int, err error) {
 // Close signals to the encoder that encoding has been completed, thereby
 // allowing it to update the placeholder values in the WAV file header.
 func (enc *encoder) Close() error {
+	enc.bw.Flush()
+
 	// Correct the size field of the RIFF type chunk header.
-	dataSize := uint32(uint64(enc.conf.Channels) * enc.nsamples * uint64(enc.bps) / 8)
+	dataSize := uint32(enc.nsamples * uint32(enc.bps) / 8)
 	riffSize := 4 + 24 + 8 + dataSize
 	off := int64(4)
-	_, err := enc.w.Seek(off, os.SEEK_SET)
+	_, err := enc.ws.Seek(off, os.SEEK_SET)
 	if err != nil {
 		return err
 	}
-	err = binary.Write(enc.w, binary.LittleEndian, riffSize)
+	err = binary.Write(enc.ws, binary.LittleEndian, riffSize)
 	if err != nil {
 		return err
 	}
 
 	// Correct the size field of the WAVE data chunk header.
 	off = 12 + 24 + 4
-	_, err = enc.w.Seek(off, os.SEEK_SET)
+	_, err = enc.ws.Seek(off, os.SEEK_SET)
 	if err != nil {
 		return err
 	}
-	err = binary.Write(enc.w, binary.LittleEndian, dataSize)
+	err = binary.Write(enc.ws, binary.LittleEndian, dataSize)
 	if err != nil {
 		return err
 	}
