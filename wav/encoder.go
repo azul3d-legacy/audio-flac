@@ -9,7 +9,13 @@ import (
 	"azul3d.org/audio.v1"
 )
 
-// encoder is capable of encoding audio samples to a WAV file.
+// An Encoder is capable of encoding audio samples to a WAV file.
+type Encoder interface {
+	audio.Writer
+	io.Closer
+}
+
+// An encoder is capable of encoding audio samples to a WAV file.
 type encoder struct {
 	// A buffered writer, wrapping write operations to w.
 	bw *bufio.Writer
@@ -28,12 +34,12 @@ type encoder struct {
 // WAV header and the encoded audio samples are written to w.
 //
 // Note: The Close method of the encoder must be called when finished using it.
-func NewEncoder(w io.WriteSeeker, conf audio.Config) (enc *encoder, err error) {
+func NewEncoder(w io.WriteSeeker, conf audio.Config) (Encoder, error) {
 	// Write WAV file header to w, based on the audio configuration.
 	// TODO(u): Add output support for additional audio sample format; instead of
 	// only using 16-bit PCM.
-	enc = &encoder{bw: bufio.NewWriter(w), ws: w, conf: conf, bps: 16}
-	err = enc.writeHeader()
+	enc := &encoder{bw: bufio.NewWriter(w), ws: w, conf: conf, bps: 16}
+	err := enc.writeHeader()
 	if err != nil {
 		return nil, err
 	}
