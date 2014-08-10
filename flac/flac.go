@@ -1,5 +1,8 @@
 // Package flac provides a FLAC audio decoder. It implements the audio.Decoder
 // interface of azul3d.org/audio.v1.
+//
+// NOTE: This package is a work in progress. The implementation is incomplete
+// and subject to change. The documentation can be inaccurate.
 package flac
 
 import (

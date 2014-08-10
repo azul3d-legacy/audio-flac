@@ -55,14 +55,6 @@ func writeHeader(w io.Writer, conf audio.Config) error {
 	return nil
 }
 
-// chunkHeader specifies the size and id of a chunk.
-type chunkHeader struct {
-	// The contents of the chunk body is derived from its id.
-	id uint32
-	// The size in bytes of the chunk body.
-	size uint32
-}
-
 // riff represents a RIFF type chunk.
 type riff struct {
 	// Chunk header
@@ -71,6 +63,14 @@ type riff struct {
 	chunkHeader
 	// RIFF type: "WAVE".
 	typ uint32
+}
+
+// chunkHeader specifies the size and id of a chunk.
+type chunkHeader struct {
+	// The contents of the chunk body is derived from its id.
+	id uint32
+	// The size in bytes of the chunk body.
+	size uint32
 }
 
 // format describes the format of the audio stream.

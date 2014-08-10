@@ -26,6 +26,9 @@
 //
 //    [1]: http://www.sonicspot.com/guide/wavefiles.html
 //    [2]: https://ccrma.stanford.edu/courses/422/projects/WaveFormat/
+//
+// NOTE: This package is a work in progress. The implementation is incomplete
+// and subject to change. The documentation can be inaccurate.
 package wav
 
 import (
