@@ -79,7 +79,7 @@ func (dec *decoder) Read(b audio.Slice) (n int, err error) {
 	// Drain buffered samples from previous read operations.
 	for _, f := range dec.buf[dec.first:] {
 		if n >= b.Len() {
-			dec.first = n
+			dec.first += n
 			return n, nil
 		}
 		b.Set(n, f)
