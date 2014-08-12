@@ -12,6 +12,7 @@ import (
 
 	"azul3d.org/audio.v1"
 	"github.com/mewkiz/flac"
+	"github.com/mewkiz/flac/frame"
 )
 
 func init() {
@@ -19,39 +20,38 @@ func init() {
 	audio.RegisterFormat("flac", "fLaC", newDecoder)
 }
 
-// newDecoder returns a FLAC audio decoder, which may be used to decode the
-// encoded audio sample of the io.Reader or io.ReadSeeker r.
-//
-// It returns either [audio.Decoder, nil] or [nil, audio.ErrInvalidData] upon
-// being called where the returned decoder is used to decode the encoded audio
-// data of r.
-func newDecoder(r interface{}) (audio.Decoder, error) {
-	rr, ok := r.(io.Reader)
-	if !ok {
-		return nil, fmt.Errorf("flac.newDecoder: unable to decode r; expected io.Reader, got %T", r)
-	}
-	dec := &decoder{buf: make(audio.F64Samples, 0)}
-	var err error
-	dec.stream, err = flac.New(rr)
-	if err != nil {
-		return nil, audio.ErrInvalidData
-	}
-	return dec, nil
-}
-
 // decoder is capable of decoding the audio samples of a FLAC stream.
 type decoder struct {
 	// The FLAC audio stream.
 	stream *flac.Stream
-	// Buffer superfluous decoded samples from previous Read operations, for
-	// future calls to Read.
-	buf audio.F64Samples
-	// Points to the first buffered sample in buf.
-	first int
+	// The previous audio frame is used as a buffer when the last call to Read
+	// read fewer audio samples than contained within the audio frame. It is nil
+	// otherwise.
+	prev *frame.Frame
+	// Points to the first unread audio sample in prev.
+	i int
 }
 
-// Config returns the audio stream configuration of this decoder. It may block
-// until at least the configuration part of the stream has been read.
+// newDecoder returns a FLAC audio decoder, which may be used to decode the
+// encoded audio samples of the io.Reader or io.ReadSeeker r.
+//
+// It returns either [audio.Decoder, nil] or [nil, audio.ErrInvalidData] upon
+// being called where the returned decoder is used to decode the encoded audio
+// data of r.
+func newDecoder(r interface{}) (dec audio.Decoder, err error) {
+	rr, ok := r.(io.Reader)
+	if !ok {
+		return nil, fmt.Errorf("flac.newDecoder: unable to decode r; expected io.Reader, got %T", r)
+	}
+	d := new(decoder)
+	d.stream, err = flac.New(rr)
+	if err != nil {
+		return nil, audio.ErrInvalidData
+	}
+	return d, nil
+}
+
+// Config returns the audio stream configuration of the decoder.
 func (dec *decoder) Config() audio.Config {
 	return audio.Config{
 		SampleRate: int(dec.stream.Info.SampleRate),
@@ -59,7 +59,7 @@ func (dec *decoder) Config() audio.Config {
 	}
 }
 
-// Read tries to read into the audio slice, b, filling it with at max b.Len()
+// Read tries to read into the audio slice, b, filling it with at mosts b.Len()
 // audio samples.
 //
 // Returned is the number of samples that where read into the slice, and an
@@ -69,57 +69,90 @@ func (dec *decoder) Config() audio.Config {
 // error to be returned at the same time (E.g. read 300 audio samples, but also
 // encountered audio.EOS).
 func (dec *decoder) Read(b audio.Slice) (n int, err error) {
-	// TODO(u): Implement fast paths for common audio sample formats:
-	//    * PCM8
-	//    * PCM16
-	//    * PCM24 (PCM32)
-
-	// Generic implementation.
-
-	// Drain buffered samples from previous read operations.
-	for _, f := range dec.buf[dec.first:] {
-		if n >= b.Len() {
-			dec.first += n
-			return n, nil
+	// The set closure sets the i:th sample of b to sample.
+	var set func(i int, sample int32)
+	switch v := b.(type) {
+	case audio.PCM8Samples:
+		set = func(i int, sample int32) {
+			// Unsigned 8-bit PCM audio sample.
+			v[i] = audio.PCM8(0x80 + sample)
 		}
-		b.Set(n, f)
-		n++
-	}
-	dec.first = 0
-	dec.buf = dec.buf[:0]
-
-	// Decode the audio samples of a frame.
-	frame, err := dec.stream.ParseNext()
-	if err != nil {
-		if err == io.EOF {
-			return n, audio.EOS
+	case audio.PCM16Samples:
+		set = func(i int, sample int32) {
+			// Signed 16-bit PCM audio sample.
+			v[i] = audio.PCM16(sample)
 		}
-		return n, err
+	case audio.PCM32Samples:
+		set = func(i int, sample int32) {
+			// Signed 32-bit PCM audio sample.
+			v[i] = audio.PCM32(sample)
+		}
+	default:
+		set = func(i int, sample int32) {
+			// Generic implementation.
+			f := pcmToF64(sample, dec.stream.Info.BitsPerSample)
+			b.Set(i, f)
+		}
 	}
-	bps := dec.stream.Info.BitsPerSample
-	for i := 0; i < int(frame.BlockSize); i++ {
-		for _, subframe := range frame.Subframes {
-			sample := subframe.Samples[i]
-			f := pcmToF64(sample, bps)
-			if n < b.Len() {
-				b.Set(n, f)
+
+	// Fill b with audio samples from the previous decoded audio frame.
+	if dec.prev != nil {
+		for ; dec.i < int(dec.prev.BlockSize); dec.i++ {
+			for _, subframe := range dec.prev.Subframes {
+				sample := subframe.Samples[dec.i]
+				if n >= b.Len() {
+					return n, nil
+				}
+				set(n, sample)
 				n++
-			} else {
-				// Buffer superfluous audio samples.
-				dec.buf = append(dec.buf, f)
 			}
 		}
 	}
+	dec.prev = nil
 
-	return n, nil
+	// Fill b with audio samples from decoded audio frames.
+	for {
+		frame, err := dec.stream.ParseNext()
+		if err != nil {
+			if err == io.EOF {
+				return n, audio.EOS
+			}
+			return n, err
+		}
+		for i := 0; i < int(frame.BlockSize); i++ {
+			for _, subframe := range frame.Subframes {
+				sample := subframe.Samples[i]
+				if n >= b.Len() {
+					if i != int(frame.BlockSize)-1 {
+						// Fewer audio samples were read then contained within the audio
+						// frame. Store the decoded audio frame and the current sample
+						// position for future read operations.
+						dec.prev = frame
+						dec.i = i
+					}
+					return n, nil
+				} else {
+					set(n, sample)
+					n++
+				}
+			}
+		}
+	}
 }
 
 // pcmToF64 converts a signed bps-bit linear PCM audio sample to a 64-bit
 // floating-point linear audio sample in the range of -1 to +1.
 func pcmToF64(sample int32, bps uint8) audio.F64 {
 	switch bps {
+	case 8:
+		// Unsigned 8-bit PCM audio sample.
+		return audio.PCM8ToF64(audio.PCM8(0x80 + sample))
 	case 16:
+		// Signed 16-bit PCM audio sample.
 		return audio.PCM16ToF64(audio.PCM16(sample))
+	case 24:
+		// Signed 32-bit PCM audio sample.
+		return audio.PCM32ToF64(audio.PCM32(sample))
 	default:
 		panic(fmt.Sprintf("not yet implemented; conversion from %d-bit PCM to F64", bps))
 	}
