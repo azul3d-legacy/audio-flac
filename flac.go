@@ -38,17 +38,20 @@ type decoder struct {
 // It returns either [audio.Decoder, nil] or [nil, audio.ErrInvalidData] upon
 // being called where the returned decoder is used to decode the encoded audio
 // data of r.
-func newDecoder(r interface{}) (dec audio.Decoder, err error) {
+func newDecoder(r interface{}) (audio.Decoder, error) {
 	rr, ok := r.(io.Reader)
 	if !ok {
 		return nil, fmt.Errorf("flac.newDecoder: unable to decode r; expected io.Reader, got %T", r)
 	}
-	d := new(decoder)
-	d.stream, err = flac.New(rr)
+
+	stream, err := flac.New(rr)
 	if err != nil {
 		return nil, audio.ErrInvalidData
 	}
-	return d, nil
+
+	return &decoder{
+		stream: stream,
+	}, nil
 }
 
 // Config returns the audio stream configuration of the decoder.
@@ -59,10 +62,10 @@ func (dec *decoder) Config() audio.Config {
 	}
 }
 
-// Read tries to read into the audio slice, b, filling it with at mosts b.Len()
+// Read tries to read into the audio slice, b, filling it with at most b.Len()
 // audio samples.
 //
-// Returned is the number of samples that where read into the slice, and an
+// Returned is the number of samples that were read into the slice, and an
 // error if any occurred.
 //
 // It is possible for the number of samples read to be non-zero; and for an
@@ -124,7 +127,7 @@ func (dec *decoder) Read(b audio.Slice) (n int, err error) {
 				sample := subframe.Samples[i]
 				if n >= b.Len() {
 					if i != int(frame.BlockSize)-1 {
-						// Fewer audio samples were read then contained within the audio
+						// Fewer audio samples were read than contained within the audio
 						// frame. Store the decoded audio frame and the current sample
 						// position for future read operations.
 						dec.prev = frame
