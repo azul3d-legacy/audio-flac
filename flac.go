@@ -15,8 +15,8 @@ import (
 	"io"
 
 	"azul3d.org/audio.v1"
-	"github.com/mewkiz/flac"
-	"github.com/mewkiz/flac/frame"
+	"gopkg.in/mewkiz/flac.v1"
+	"gopkg.in/mewkiz/flac.v1/frame"
 )
 
 func init() {
