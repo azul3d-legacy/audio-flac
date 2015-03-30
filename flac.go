@@ -63,6 +63,7 @@ func (dec *decoder) Config() audio.Config {
 	return audio.Config{
 		SampleRate: int(dec.stream.Info.SampleRate),
 		Channels:   int(dec.stream.Info.NChannels),
+		BPS:        int(dec.stream.Info.BitsPerSample),
 	}
 }
 
